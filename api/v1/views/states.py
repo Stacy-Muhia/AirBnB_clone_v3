@@ -1,101 +1,133 @@
 #!/usr/bin/python3
-"""Contains the index view for the API."""
-from flask import jsonify, abort, request
+"""
+Create a new view for State objects - handles all default RESTful API actions.
+"""
 
+# Import necessary modules
+from flask import abort, jsonify, request
+from models.state import State
 from api.v1.views import app_views
 from models import storage
-from models.state import State
 
 
-@app_views.route("/states", methods=["POST"], strict_slashes=False)
-def create_state():
-    """Creates a new state object"""
-
-    # if body doesn't contain valid JSON
-    if not request.is_json:
-        abort(400, "Not a JSON")
-
-    # else change the HTTP body into a dict
-    body = request.get_json()
-
-    # if the name key doesn't exist in the body dict
-    if body.get("name") is None:
-        abort(400, "Missing name")
-
-    # create and save the new state instance
-    new_state = State(**body)
-    storage.new(new_state)
-    storage.save()
-
-    return jsonify(new_state.to_dict()), 201
-
-
-@app_views.route("/states", methods=["GET"], strict_slashes=False)
-def retrieve_states():
-    """Retrieves a list of all State objects"""
-    # grab all state objects from storage
+# Route for retrieving all State objects
+@app_views.route('/states', methods=['GET'], strict_slashes=False)
+def get_all_states():
+    """
+    Retrieves the list of all State objects.
+    """
+    # Get all State objects from the storage
     states = storage.all(State).values()
-
-    # convert all state objects into dictionaries & put in list
+    # Convert objects to dictionaries and jsonify the list
     state_list = [state.to_dict() for state in states]
-
-    # return the jsonified list
     return jsonify(state_list)
 
 
-@app_views.route("/states/<id>", methods=["GET"], strict_slashes=False)
-def retrieve_state(id):
-    """Retrieves a single State object based on its id"""
-    # grab the state object from storage
-    state = storage.get(State, id)
-
-    if state:  # return the jsonified object
-        return jsonify(state.to_dict())
-    else:  # else if state is None
-        abort(404)
-
-
-@app_views.route("/states/<id>", methods=["PUT"], strict_slashes=False)
-def update_state(id):
-    """Updates specific instance of a state"""
-    # retrieve the object by id if it exists
-    state = storage.get(State, id)
-
-    # abort if state with specific id can't be found
-    if state is None:
-        abort(404)
-
-    # if body doesn't contain valid JSON
-    if not request.is_json:
-        abort(400, "Not a JSON")
-
-    # else transform HTTP body into a dict
-    body = request.get_json()
-
-    # ignore id, created_at, updated_at keys during update
-    excluded_keys = ["id", "created_at", "updated_at"]
-    # iterate over body dict & update the state object
-    # with the new values from body dict
-    for key, value in body.items():
-        if key not in excluded_keys:
-            setattr(state, key, value)
-
-    # save the updated state instance
-    storage.save()
-
-    return jsonify(state.to_dict()), 200
-
-
-@app_views.route("/states/<id>", methods=["DELETE"], strict_slashes=False)
-def delete_state(id):
-    """Deletes specific instance of a state"""
-    # retrieve the object by id if it exists
-    state = storage.get(State, id)
-
-    # delete the object if it exists
+# Route for retrieving a specific State object by ID
+@app_views.route('/states/<state_id>', methods=['GET'], strict_slashes=False)
+def get_state(state_id):
+    """
+    Retrieves a State object.
+    """
+    # Get the State object with the given ID from the storage
+    state = storage.get(State, state_id)
     if state:
+        # Return the State object in JSON format
+        return jsonify(state.to_dict())
+    else:
+        # Return 404 error if the State object is not found
+        abort(404)
+
+
+# Route for deleting a specific State object by ID
+@app_views.route('/states/<state_id>', methods=['DELETE'])
+def delete_state(state_id):
+    """
+    Deletes a State object.
+    """
+    # Get the State object with the given ID from the storage
+    state = storage.get(State, state_id)
+    if state:
+        # Delete the State object from the storage and save changes
         storage.delete(state)
         storage.save()
+        # Return an empty JSON with 200 status code
         return jsonify({}), 200
-    else:  # else if state is None
+    else:
+        # Return 404 error if the State object is not found
         abort(404)
+
+
+# Route for creating a new State object
+@app_views.route('/states', methods=['POST'], strict_slashes=False)
+def create_state():
+    """
+    Creates a State object.
+    """
+    if not request.get_json():
+        # Return 400 error if the request data is not in JSON format
+        abort(400, 'Not a JSON')
+
+    # Get the JSON data from the request
+    kwargs = request.get_json()
+    if 'name' not in kwargs:
+        # Return 400 error if 'name' key is missing in the JSON data
+        abort(400, 'Missing name')
+
+    # Create a new State object with the JSON data
+    state = State(**kwargs)
+    # Save the State object to the storage
+    state.save()
+    # Return the newly created State object in JSON format with 201 status code
+    return jsonify(state.to_dict()), 201
+
+
+# Route for updating an existing State object by ID
+@app_views.route('/states/<state_id>', methods=['PUT'], strict_slashes=False)
+def update_state(state_id):
+    """
+    Updates a State object.
+    """
+    # Get the State object with the given ID from the storage
+    state = storage.get(State, state_id)
+    if state:
+        if not request.get_json():
+            # Return 400 error if the request data is not in JSON format
+            abort(400, 'Not a JSON')
+
+        # Get the JSON data from the request
+        data = request.get_json()
+        ignore_keys = ['id', 'created_at', 'updated_at']
+        # Update the attributes of the State object with the JSON data
+        for key, value in data.items():
+            if key not in ignore_keys:
+                setattr(state, key, value)
+
+        # Save the updated State object to the storage
+        state.save()
+        # Return the updated State object in JSON format with 200 status code
+        return jsonify(state.to_dict()), 200
+    else:
+        # Return 404 error if the State object is not found
+        abort(404)
+
+
+# Error Handlers:
+@app_views.errorhandler(404)
+def not_found(error):
+    """
+    Raises a 404 error.
+    """
+    # Return a JSON response for 404 error
+    response = {'error': 'Not found'}
+    return jsonify(response), 404
+
+
+@app_views.errorhandler(400)
+def bad_request(error):
+    """
+    Returns a Bad Request message for illegal requests to the API.
+    """
+    # Return a JSON response for 400 error
+    response = {'error': 'Bad Request'}
+    return jsonify(response), 400
